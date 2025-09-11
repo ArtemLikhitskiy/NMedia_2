@@ -71,7 +71,40 @@ class PostViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun likeById(id: Long) {
-        thread { repository.likeById(id) }
+        thread {
+            _data.postValue(
+                FeedModel(posts =
+                    _data.value!!.posts.map {
+                        if (it.id == id) it.copy(
+                            likedByMe = !it.likedByMe,
+                            likes = if (it.likedByMe) it.likes - 1 else it.likes + 1
+                        )
+                        else it
+                    })
+            )
+
+            try {
+                val post = _data.value?.posts?.find { it.id == id }
+                if (post != null) {
+                    if (post.likedByMe) {
+                        repository.unlikeById(id)
+                    } else {
+                        repository.likeById(id)
+                    }
+                }
+            } catch (_: IOException) {
+                _data.postValue(
+                    FeedModel(posts =
+                        _data.value!!.posts.map {
+                            if (it.id == id) it.copy(
+                                likedByMe = !it.likedByMe,
+                                likes = if (it.likedByMe) it.likes + 1 else it.likes - 1
+                            )
+                            else it
+                        })
+                )
+            }
+        }
     }
 
     fun removeById(id: Long) {
