@@ -48,6 +48,15 @@ class PostViewHolder(
             like.text = "${post.likes}"
             attachment.visibility = View.GONE
 
+            val url = "http://10.0.2.2:9999/avatars/${post.authorAvatar}"
+            Glide.with(itemView)
+                .load(url)
+                .placeholder(R.drawable.ic_loading_24dp)
+                .error(R.drawable.ic_baseline_error_outline_24dp)
+                .timeout(10_000)
+                .circleCrop()
+                .into(avatar)
+
             val urlAttachment = "http://10.0.2.2:9999/images/${post.attachment?.url}"
             if (post.attachment != null) {
                 attachment.visibility = View.VISIBLE
