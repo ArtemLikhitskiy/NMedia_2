@@ -1,169 +1,96 @@
 package ru.netology.nmedia.repository
 
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import okhttp3.*
-import okhttp3.Call
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
-import retrofit2.Callback
-import ru.netology.nmedia.api.PostApiServiceHolder
+import androidx.lifecycle.map
+import ru.netology.nmedia.api.PostsApi
+import ru.netology.nmedia.dao.PostDao
 import ru.netology.nmedia.dto.Post
-import java.io.IOException
-import java.util.concurrent.TimeUnit
+import ru.netology.nmedia.entity.PostEntity
+import ru.netology.nmedia.entity.toDto
+import ru.netology.nmedia.entity.toEntity
+import ru.netology.nmedia.error.ApiError
+import ru.netology.nmedia.error.NetworkError
+import ru.netology.nmedia.error.UnknownError
 
+class PostRepositoryImpl(private val dao: PostDao): PostRepository {
 
-class PostRepositoryImpl: PostRepository {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .build()
-    private val gson = Gson()
-    private val typeToken = object : TypeToken<List<Post>>() {}
+    override val data = dao.getAll().map(List<PostEntity>::toDto)
 
-    companion object {
-        private const val BASE_URL = "http://10.0.2.2:9999"
-        private val jsonType = "application/json".toMediaType()
+    override suspend fun getAll() {
+        try {
+            val response = PostsApi.service.getAll()
+            if (!response.isSuccessful) {
+                throw ApiError(response.code(), response.message())
+            }
+
+            val body = response.body() ?: throw ApiError(response.code(), response.message())
+            dao.insert(body.toEntity())
+        } catch (e: okio.IOException) {
+            throw NetworkError
+        } catch (e: Exception) {
+            throw UnknownError
+        }
     }
 
-    override fun getAllAsync(callback: PostRepository.Callback<List<Post>>) {
-        PostApiServiceHolder.service.getAll()
-            .enqueue(object : Callback<List<Post>> {
-                override fun onResponse(
-                    call: retrofit2.Call<List<Post>>,
-                    response: retrofit2.Response<List<Post>>
-                ) {
+    override suspend fun save(post: Post) {
+        try {
+            val response = PostsApi.service.save(post)
+            if (!response.isSuccessful) {
+                throw ApiError(response.code(), response.message())
+            }
 
-                    if (!response.isSuccessful) {
-                        callback.onError(RuntimeException(response.message()))
-                        return
-                    }
-                    callback.onSuccess(response.body() ?: run {
-                        callback.onError(
-                            RuntimeException(
-                                response.message() + response.code().toString()
-                            )
-                        )
-                        return
-                    })
-                }
-
-                override fun onFailure(call: retrofit2.Call<List<Post>>, t: Throwable) {
-                    callback.onError(RuntimeException(t))
-                }
-            })
+            val body = response.body() ?: throw ApiError(response.code(), response.message())
+            dao.insert(PostEntity.fromDto(body))
+        } catch (e: okio.IOException) {
+            throw NetworkError
+        } catch (e: Exception) {
+            throw UnknownError
+        }
     }
 
-    override fun likeByIdAsync(
-        id: Long,
-        callback: PostRepository.Callback<Post>
-    ) {
-        PostApiServiceHolder.service.likeById(id).enqueue(object : Callback<Post> {
-            override fun onResponse(
-                call: retrofit2.Call<Post>,
-                response: retrofit2.Response<Post>
-            ) {
-                if (!response.isSuccessful) {
-                    callback.onError(RuntimeException(response.message()))
-                    return
-                }
-
-                callback.onSuccess(response.body() ?: run {
-                    callback.onError(
-                        RuntimeException(
-                            response.message() + response.code().toString()
-                        )
-                    )
-                    return
-                })
+    override suspend fun likeById(id: Long) {
+        try {
+            dao.likeById(id)
+            val response = PostsApi.service.likeById(id)
+            if (!response.isSuccessful) {
+                throw ApiError(response.code(), response.message())
             }
-
-            override fun onFailure(call: retrofit2.Call<Post>, t: Throwable) {
-                callback.onError(RuntimeException(t))
-            }
-        })
+        } catch (e: okio.IOException) {
+            dao.dislikeById(id)
+            throw NetworkError
+        } catch (e: Exception) {
+            dao.dislikeById(id)
+            throw UnknownError
+        }
     }
+    override suspend fun  dislikeById(id: Long) {
 
-    override fun unlikeByIdAsync(
-        id: Long,
-        callback: PostRepository.Callback<Post>
-    ) {
-        PostApiServiceHolder.service.unlikeById(id).enqueue(object : Callback<Post> {
-            override fun onResponse(call: retrofit2.Call<Post>, response: retrofit2.Response<Post>) {
-                if (!response.isSuccessful) {
-                    callback.onError(RuntimeException(response.message()))
-                    return
-                }
-
-                callback.onSuccess(response.body() ?: run {
-                    callback.onError(
-                        RuntimeException(
-                            response.message() + response.code().toString()
-                        )
-                    )
-                    return
-                })
+        try {
+            dao.dislikeById(id)
+            val response = PostsApi.service.dislikeById(id)
+            if (!response.isSuccessful) {
+                throw ApiError(response.code(), response.message())
             }
 
-            override fun onFailure(call: retrofit2.Call<Post>, t: Throwable) {
-                callback.onError(RuntimeException(t))
-            }
-        })
+        } catch (e: okio.IOException) {
+            dao.likeById(id)
+            throw NetworkError
+        } catch (e: Exception) {
+            dao.likeById(id)
+            throw UnknownError
+        }
     }
-
-    override fun saveAsync(
-        post: Post,
-        callback: PostRepository.Callback<Post>
-    ) {
-        PostApiServiceHolder.service.save(post).enqueue(object : Callback<Post> {
-            override fun onResponse(call: retrofit2.Call<Post>, response: retrofit2.Response<Post>) {
-                if (!response.isSuccessful) {
-                    callback.onError(RuntimeException(response.message()))
-                    return
-                }
-
-                callback.onSuccess(response.body() ?: run {
-                    callback.onError(
-                        RuntimeException(
-                            response.message() + response.code().toString()
-                        )
-                    )
-                    return
-                })
+    override suspend fun removeById(id: Long) {
+        try {
+            val response = PostsApi.service.removeById(id)
+            if (!response.isSuccessful) {
+                throw ApiError(response.code(), response.message())
             }
 
-            override fun onFailure(call: retrofit2.Call<Post>, t: Throwable) {
-                callback.onError(RuntimeException(t))
-            }
-        })
-    }
-
-    override fun removeByIdAsync(
-        id: Long,
-        callback: PostRepository.Callback<Unit>
-    ) {
-        PostApiServiceHolder.service.removeById(id).enqueue(object : Callback<Unit> {
-            override fun onResponse(call: retrofit2.Call<Unit>, response: retrofit2.Response<Unit>) {
-                if (!response.isSuccessful) {
-                    callback.onError(RuntimeException(response.message()))
-                    return
-                }
-
-                callback.onSuccess(response.body() ?: run {
-                    callback.onError(
-                        RuntimeException(
-                            response.message() + response.code().toString()
-                        )
-                    )
-                    return
-                })
-            }
-
-            override fun onFailure(call: retrofit2.Call<Unit>, t: Throwable) {
-                callback.onError(RuntimeException(t))
-            }
-        })
+            dao.removeById(id)
+        } catch (e: okio.IOException) {
+            throw NetworkError
+        } catch (e: Exception) {
+            throw UnknownError
+        }
     }
 }
